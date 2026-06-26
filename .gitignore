@@ -13,6 +13,7 @@ __pycache__/
 face.png
 pet.png
 sample_cat.png
+faces/
 
 # IDE(에디터) 설정 폴더 무시
 .vscode/

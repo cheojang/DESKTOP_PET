@@ -7,13 +7,16 @@ import sys
 import os
 import math
 import random
+import shutil
 from PIL import Image, ImageDraw
 from PyQt5.QtCore import Qt, QPoint, QTimer
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QSystemTrayIcon, QMenu, QAction, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QSystemTrayIcon, QMenu, QAction, QFileDialog, QMessageBox, QDialog
 from PyQt5.QtGui import QPixmap, QTransform, QIcon, QImage
 
-# 2단계에서 개발한 얼굴 자동 추출 모듈 함수 불러오기
+# 개발 완료한 모듈들 가져오기
 from face_extractor import extract_face
+from face_warp import generate_faces
+from camera_booth import CameraBooth
 
 # 캐릭터의 행동 상태 정의
 STATE_FALL = 0   # 낙하 중 (중력 적용)
@@ -29,9 +32,10 @@ PEEK_RIGHT = 1
 PEEK_BOTTOM = 2
 
 class DesktopPet(QMainWindow):
-    def __init__(self, face_path="face.png"):
+    def __init__(self, faces_dir="faces"):
         super().__init__()
-        self.face_path = face_path
+        self.faces_dir = faces_dir
+        self.faces = {}
         
         # 1. 윈도우 스타일 (테두리 없음, 항상 위, 작업 표시줄 생략, 투명 배경)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -62,7 +66,10 @@ class DesktopPet(QMainWindow):
             'peek': ('assets/body_peek.png', (32, 22))
         }
         
-        # 5. 물리 및 상태 제어 변수들
+        # 5. 다중 표정 얼굴 세트 로드
+        self.load_faces()
+        
+        # 6. 물리 및 상태 제어 변수들
         self.state = STATE_FALL
         self.velocity_x = 0
         self.velocity_y = 0
@@ -88,17 +95,39 @@ class DesktopPet(QMainWindow):
         # 최초 합성 프레임 생성 및 적용
         self.update_character_visual()
         
-        # 6. 마우스 드래그 변수
+        # 7. 마우스 드래그 변수
         self.drag_position = QPoint()
         self.is_dragging = False
         
-        # 7. 시스템 트레이 아이콘 구축
+        # 8. 시스템 트레이 아이콘 구축
         self.init_tray()
         
-        # 8. 주기적으로 동작(30ms 마다, 약 33fps)을 제어할 타이머 시작
+        # 9. 주기적으로 동작(30ms 마다, 약 33fps)을 제어할 타이머 시작
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_behavior)
         self.timer.start(30)
+
+    def load_faces(self):
+        """faces/ 디렉토리에서 사용 가능한 표정별 이미지 파일들을 수집하고 폴백 매핑을 지정합니다."""
+        target_keys = ['idle', 'sleep', 'walk_r', 'walk_l', 'drag']
+        os.makedirs(self.faces_dir, exist_ok=True)
+        
+        # 만약 faces/ 디렉토리에 얼굴이 하나도 없는데 이전 버전의 face.png가 있다면 복사해서 세팅
+        idle_path = os.path.join(self.faces_dir, "face_idle.png")
+        if not os.path.exists(idle_path) and os.path.exists("face.png"):
+            shutil.copy("face.png", idle_path)
+            
+        for key in target_keys:
+            path = os.path.join(self.faces_dir, f"face_{key}.png")
+            if os.path.exists(path):
+                self.faces[key] = path
+            else:
+                # 특정 표정 누락 시 정면(idle) 얼굴로 복사 대행
+                if os.path.exists(idle_path):
+                    self.faces[key] = idle_path
+                else:
+                    # 최악의 경로 이탈 대비 face.png 지정
+                    self.faces[key] = "face.png"
 
     def pil_to_qpixmap(self, pil_img):
         """PIL Image 객체를 고속으로 QPixmap 데이터로 바꾸어 줍니다."""
@@ -106,17 +135,31 @@ class DesktopPet(QMainWindow):
         qimg = QImage(im_data, pil_img.width, pil_img.height, QImage.Format_RGBA8888)
         return QPixmap.fromImage(qimg)
 
-    def assemble_pet(self, body_key, flip=False, sleep_y_offset=0, head_wobble=0):
+    def assemble_pet(self, body_key, face_key, flip=False, sleep_y_offset=0):
         """
-        주어진 몸통 템플릿과 사용자 얼굴(face.png)을 결합하여
+        주어진 몸통 템플릿과 얼굴 팩의 감정 이미지 조각을 결합하여
         하나의 완성된 100x100 RGBA 이미지를 생성합니다.
         """
         body_path, joint = self.joints[body_key]
         neck_x, neck_y = joint
         
+        # 지정된 표정 얼굴 이미지 가져오기
+        face_path = self.faces.get(face_key, "face.png")
+        if not os.path.exists(face_path):
+            face_path = self.faces.get("idle", "face.png")
+            if not os.path.exists(face_path):
+                face_path = "face.png"
+                if not os.path.exists(face_path):
+                    # 최후의 수단: sample_cat.png에서 얼굴 재크롭
+                    if os.path.exists("sample_cat.png"):
+                        extract_face("sample_cat.png", "face.png", target_size=50)
+                        face_path = "face.png"
+                    else:
+                        raise FileNotFoundError("펫으로 사용할 얼굴 리소스(face.png)가 존재하지 않습니다.")
+        
         # 1) 몸통 및 얼굴 오픈
         body_img = Image.open(body_path).convert("RGBA")
-        face_img = Image.open(self.face_path).convert("RGBA")
+        face_img = Image.open(face_path).convert("RGBA")
         
         # 2) 100x100 크기의 완전 투명 캔버스 생성
         canvas = Image.new("RGBA", (self.char_size, self.char_size), (0, 0, 0, 0))
@@ -143,43 +186,36 @@ class DesktopPet(QMainWindow):
 
     def update_character_visual(self):
         """현재 캐릭터의 상태에 최적화된 스프라이트 결합 프레임을 QLabel에 반영합니다."""
-        if not os.path.exists(self.face_path):
-            # face.png가 없을 경우 sample_cat.png에서 임시 생성 시도
-            if os.path.exists("sample_cat.png"):
-                extract_face("sample_cat.png", self.face_path, target_size=50)
-            else:
-                return
-
-        # 상태별로 템플릿 몸통을 정하여 합성
+        # 상태별로 템플릿 몸통 및 AI 표정을 조인트 매핑하여 조립
         if self.state == STATE_FALL:
-            # 낙하 중에는 대기(앉은) 몸통 적용
-            composed = self.assemble_pet('idle', flip=(self.walk_direction < 0))
+            composed = self.assemble_pet('idle', 'idle', flip=(self.walk_direction < 0))
             
         elif self.state == STATE_IDLE:
-            # 쉴 때는 앉은 몸통 적용
-            composed = self.assemble_pet('idle', flip=(self.walk_direction < 0))
+            composed = self.assemble_pet('idle', 'idle', flip=(self.walk_direction < 0))
             
         elif self.state == STATE_WALK:
-            # 걸어갈 때는 걷기 1, 2 발 모양 프레임을 교차 재생
+            # 걷기 프레임 재생
             frame_num = int(self.anim_time) % 2
             walk_key = 'walk1' if frame_num == 0 else 'walk2'
-            composed = self.assemble_pet(walk_key, flip=(self.walk_direction < 0))
+            # 걷는 방향에 따른 옆얼굴(Warp) 각도 매칭
+            face_key = 'walk_r' if self.walk_direction > 0 else 'walk_l'
+            composed = self.assemble_pet(walk_key, face_key, flip=False)
             
         elif self.state == STATE_DRAG:
-            # 마우스에 들려 끌려갈 때는 매달려 다리 버둥대는 대롱이 몸통 적용
-            composed = self.assemble_pet('peek', flip=(self.walk_direction < 0))
+            # 대롱대롱 매달려 골뱅이 당황 눈 적용
+            composed = self.assemble_pet('peek', 'drag', flip=(self.walk_direction < 0))
             
         elif self.state == STATE_PEEK:
-            # 화면 가장자리에 붙어 숨을 때 매달리기 몸통 적용
-            composed = self.assemble_pet('peek', flip=(self.walk_direction < 0))
+            # 매달려 정면 눈치보기
+            composed = self.assemble_pet('peek', 'idle', flip=(self.walk_direction < 0))
             
         elif self.state == STATE_SLEEP:
-            # 자는 동안은 눕기 몸통을 쓰며, 숨 쉬는 리듬에 맞춰 머리 위치를 오르내림 (쌔근쌔근 연출)
-            breath_offset = int(math.sin(self.anim_time) * 1.5) # 1~2픽셀 오차
-            composed = self.assemble_pet('sleep', flip=(self.walk_direction < 0), sleep_y_offset=breath_offset)
+            # 눕기 몸통에 눈 감은(Sleep) 얼굴을 입히고 쌔근쌔근 호흡 연출
+            breath_offset = int(math.sin(self.anim_time) * 1.5)
+            composed = self.assemble_pet('sleep', 'sleep', flip=(self.walk_direction < 0), sleep_y_offset=breath_offset)
             
         else:
-            composed = self.assemble_pet('idle')
+            composed = self.assemble_pet('idle', 'idle')
 
         # QLabel에 완성본 대입
         pixmap = self.pil_to_qpixmap(composed)
@@ -192,12 +228,19 @@ class DesktopPet(QMainWindow):
         
         tray_menu = QMenu()
         
+        # 1) AI 자동 이미지 변형 연동 단일 사진 변경 액션
         change_photo_action = QAction("사진 변경 (새 펫 등록)", self)
         change_photo_action.triggered.connect(self.change_pet_photo)
         tray_menu.addAction(change_photo_action)
         
+        # 2) 웹캠 촬영실 팝업 액션
+        open_booth_action = QAction("카메라로 캐릭터 만들기", self)
+        open_booth_action.triggered.connect(self.open_camera_booth)
+        tray_menu.addAction(open_booth_action)
+        
         tray_menu.addSeparator()
         
+        # 3) 프로그램 종료 액션
         quit_action = QAction("종료", self)
         quit_action.triggered.connect(QApplication.quit)
         tray_menu.addAction(quit_action)
@@ -207,12 +250,15 @@ class DesktopPet(QMainWindow):
 
     def update_tray_icon(self):
         """트레이 영역에 펫 얼굴 아이콘이 뜨도록 갱신합니다."""
-        if os.path.exists(self.face_path):
-            self.tray_icon.setIcon(QIcon(self.face_path))
-            self.tray_icon.setToolTip("나만의 데스크톱 펫 v2.0")
+        idle_face = os.path.join(self.faces_dir, "face_idle.png")
+        if os.path.exists(idle_face):
+            self.tray_icon.setIcon(QIcon(idle_face))
+        else:
+            self.tray_icon.setIcon(QIcon("face.png"))
+        self.tray_icon.setToolTip("나만의 데스크톱 펫 v3.0")
 
     def change_pet_photo(self):
-        """사용자가 선택한 사진에서 OpenCV로 얼굴만 오려내어 실시간 조립합니다."""
+        """사용자가 선택한 단일 사진에서 AI 표정 합성 모델을 가동시켜 5종 표정 세트를 조립합니다."""
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -226,30 +272,54 @@ class DesktopPet(QMainWindow):
             self.state = STATE_FALL
             self.velocity_y = 0
             
-            output_face_path = os.path.abspath(self.face_path)
+            print(f"새 사진을 분석하여 AI 표정 세트를 생성 중입니다: {file_path}")
             
-            # 사용자 진행 알림
+            # 사용자 알림
             reply = QMessageBox.information(
                 self,
-                "얼굴 교체 중",
-                "선택하신 사진에서 얼굴을 자동 감지해 잘라내는 중입니다.\n약 1~3초가 소요됩니다.",
+                "AI 표정 합성 중",
+                "구글 AI 기술로 사진의 눈, 코, 입을 감지하여 다양한 행동 표정(눈감기, 옆보기, 놀람)을 합성하고 있습니다.\n약 3~5초가 소요됩니다. 확인을 눌러 완료될 때까지 기다려 주세요.",
                 QMessageBox.Ok
             )
             
-            # 2단계의 얼굴 감지 크롭기 작동
-            success = extract_face(file_path, output_face_path, target_size=50)
+            # 2단계의 AI 표정 변형기 작동
+            success = generate_faces(file_path, self.faces_dir, target_size=50)
             
             if success:
+                # 수집된 5종 얼굴 세트 재로드
+                self.load_faces()
                 self.update_tray_icon()
                 self.update_character_visual()
                 
-                # 공중에서 떨어지며 교체 확인 시켜주기
+                # 공중에서 떨어뜨려 확인 시켜주기
                 min_x, max_x, floor_y = self.get_screen_bounds()
                 self.move(self.x(), floor_y - 250)
                 
-                QMessageBox.information(self, "성공", "얼굴 교체에 성공했습니다! 귀여운 새 모션으로 작동합니다. 👶✨")
+                QMessageBox.information(self, "성공", "AI 다중 표정 펫이 완성되어 소환되었습니다! 🎉")
             else:
-                QMessageBox.critical(self, "실패", "얼굴을 감지하지 못했습니다. 얼굴이 뚜렷한 정면 사진을 다시 업로드해 주세요.")
+                QMessageBox.critical(self, "실패", "얼굴 랜드마크 감지에 실패했습니다. 정면 얼굴이 뚜렷한 사진을 업로드해 주세요.")
+
+    def open_camera_booth(self):
+        """노트북 웹캠 촬영 다이얼로그를 띄워 실시간으로 다각도 캐릭터를 촬영해 가져옵니다."""
+        # 펫 동작 일시정지 (마우스 드래그 상태로 잠가둠)
+        old_state = self.state
+        self.state = STATE_DRAG
+        
+        booth = CameraBooth(self.faces_dir, self)
+        if booth.exec_() == QDialog.Accepted:
+            # 촬영 성공 완료 시, 얼굴 세트 재수집 및 화면 갱신
+            self.load_faces()
+            self.update_tray_icon()
+            self.update_character_visual()
+            
+            # 소환 낙하 작동
+            self.state = STATE_FALL
+            self.velocity_y = 0
+            min_x, max_x, floor_y = self.get_screen_bounds()
+            self.move(self.x(), floor_y - 250)
+        else:
+            # 취소하고 닫았을 때 기존 상태로 환원
+            self.state = old_state
 
     def get_screen_bounds(self):
         """사용 가능한 화면의 좌우/하단 경계 범위를 구합니다."""
@@ -269,7 +339,7 @@ class DesktopPet(QMainWindow):
         self.peek_return_x = current_x
         self.peek_return_y = current_y
         
-        # 몸통이 100x100 캔버스 내부에서 약 64x64 크기이므로 30px 버퍼
+        # 100x100 규격 내부 64x64 캐릭터 가이드 마진 30px
         visible_buffer = 30
         
         if peek_type == PEEK_LEFT:
@@ -366,7 +436,6 @@ class DesktopPet(QMainWindow):
                 if rand_val < 0.15:
                     self.start_peek(PEEK_BOTTOM, self.x(), self.y())
                 elif rand_val < 0.35:
-                    # 앉아 쉬다가 누워 자기로 전환
                     self.state = STATE_SLEEP
                     self.state_timer_counter = 0
                     self.state_duration = random.randint(150, 350)
@@ -381,12 +450,11 @@ class DesktopPet(QMainWindow):
                     self.anim_time = 0.0
                     
         elif self.state == STATE_SLEEP:
-            # 자는 동안에도 호흡 사인파를 갱신
             self.anim_time += 0.10
             
             self.state_timer_counter += 1
             if self.state_timer_counter >= self.state_duration:
-                # 꿀잠을 자고 나면 다시 걷기 시작
+                # 잠에서 깸
                 self.state = STATE_WALK
                 self.state_timer_counter = 0
                 self.state_duration = random.randint(150, 300)
@@ -477,12 +545,20 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     QApplication.setQuitOnLastWindowClosed(False)
     
-    face_image = "face.png"
-    # face.png가 없을 경우 sample_cat.png에서 가공 시도
-    if not os.path.exists(face_image) and os.path.exists("sample_cat.png"):
-        extract_face("sample_cat.png", face_image, target_size=50)
-        
-    pet = DesktopPet(face_image)
+    # faces/face_idle.png 등이 다 비어 있는 경우를 대비해, face.png에서 랜드마크 분석해서 faces 세트 자동 세팅
+    faces_dir = "faces"
+    idle_face = os.path.join(faces_dir, "face_idle.png")
+    
+    if not os.path.exists(idle_face):
+        if os.path.exists("face.png"):
+            # 이전 버전 face.png를 face_idle로 복사해둠
+            os.makedirs(faces_dir, exist_ok=True)
+            shutil.copy("face.png", idle_face)
+        elif os.path.exists("sample_cat.png"):
+            # sample_cat.png를 기반으로 AI 표정 5장 세트 최초 빌드
+            generate_faces("sample_cat.png", faces_dir, target_size=50)
+
+    pet = DesktopPet(faces_dir)
     pet.move(500, 100)
     pet.show()
     
