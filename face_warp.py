@@ -2,12 +2,13 @@
 사진 → 얼굴 추출 → AR 표정 8장 생성.
 
 rembg 주의: 모듈 레벨 import 금지 (onnxruntime 없으면 sys.exit 호출).
-함수 내부에서 subprocess로 사용 가능 여부 테스트 후 지연 import.
+함수 내부에서 사용 가능 여부 확인 후 지연 import.
 """
 
 import os
 import sys
-import subprocess
+import functools
+import importlib.util
 import cv2
 import numpy as np
 from PIL import Image
@@ -20,15 +21,25 @@ CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 EXPRESSIONS = ["idle", "sleep", "walk_r", "walk_l", "cry", "laugh", "angry", "drag"]
 
 
+@functools.lru_cache(maxsize=1)
 def _rembg_available():
+    """
+    rembg 사용 가능 여부 (결과 캐시).
+
+    rembg는 onnxruntime 백엔드가 없을 때만 import 단계에서 sys.exit()을 호출한다.
+    따라서 'onnxruntime이 import 되는가'가 안전성의 실제 조건이다.
+    - onnxruntime import 자체는 sys.exit을 호출하지 않으므로 직접 확인해도 안전.
+    - rembg 설치 여부는 find_spec으로 모듈을 '실행하지 않고' 확인 (sys.exit 회피).
+
+    과거 구현은 `from rembg import remove`를 subprocess로 timeout=10s 안에 테스트했는데,
+    rembg import가 numba JIT 등으로 30s 이상 걸려 항상 타임아웃→False가 되어
+    누끼가 영영 실행되지 않는 버그가 있었음.
+    """
     try:
-        result = subprocess.run(
-            [sys.executable, "-c", "from rembg import remove"],
-            capture_output=True, timeout=10
-        )
-        return result.returncode == 0
+        import onnxruntime  # noqa: F401  (import 안전, sys.exit 없음)
     except Exception:
         return False
+    return importlib.util.find_spec("rembg") is not None
 
 
 def _remove_bg(pil_img):
