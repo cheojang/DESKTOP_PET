@@ -1,20 +1,7 @@
-# 파이썬 가상환경 무시
-.venv/
-venv/
-ENV/
-
-# 파이썬 내부 컴파일/캐시 파일 무시
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-
-# 개인 펫 이미지 및 디버그용 샘플 무시
-face.png
-pet.png
-sample_cat.png
+assets/
 faces/
-
-# IDE(에디터) 설정 폴더 무시
-.vscode/
-.idea/
+*.bat
+.env

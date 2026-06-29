@@ -1,0 +1,7 @@
+PyQt5
+pillow
+opencv-python
+mediapipe
+psutil
+numpy
+rembg[cpu]
