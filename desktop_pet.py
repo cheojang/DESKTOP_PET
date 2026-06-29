@@ -1,6 +1,6 @@
 """
 데스크톱 펫 메인 컨트롤러.
-PyQt5 투명 오버레이 윈도우 + 60FPS 게임 루프.
+PyQt5 투명 오버레이 윈도우 + 30FPS 게임 루프.
 """
 
 import sys
@@ -28,7 +28,7 @@ import face_warp
 
 IS_WINDOWS = platform.system() == "Windows"
 
-FRAME_MS = 16   # ~60 FPS
+FRAME_MS = 33   # ~30 FPS
 
 
 def get_window_floors(own_hwnd=None):
@@ -133,11 +133,14 @@ class DesktopPet(QWidget):
         self._tray = QSystemTrayIcon(icon, self)
         menu = QMenu()
 
-        act_photo  = QAction("사진 교체", self)
+        act_camera = QAction("웹캠으로 촬영", self)
+        act_photo  = QAction("사진 파일로 교체", self)
         act_quit   = QAction("종료",     self)
+        act_camera.triggered.connect(self._capture_webcam)
         act_photo.triggered.connect(self._change_photo)
         act_quit.triggered.connect(QApplication.quit)
 
+        menu.addAction(act_camera)
         menu.addAction(act_photo)
         menu.addSeparator()
         menu.addAction(act_quit)
@@ -159,6 +162,19 @@ class DesktopPet(QWidget):
             self._tray.showMessage("Desktop Pet", f"표정 {len(saved)}장 생성 완료!", QSystemTrayIcon.Information, 2000)
         except Exception as e:
             QMessageBox.warning(None, "오류", str(e))
+
+    def _capture_webcam(self):
+        from camera_booth import CameraBooth
+        from PyQt5.QtWidgets import QDialog
+        booth = CameraBooth()
+        if booth.exec_() == QDialog.Accepted:
+            self._ren.reload_faces()
+            saved = booth.saved_expressions
+            self._tray.showMessage(
+                "Desktop Pet",
+                f"웹캠 AI 표정 {len(saved)}장 생성 완료!",
+                QSystemTrayIcon.Information, 2000
+            )
 
     def _update_window_floors(self):
         floors = get_window_floors(self._own_hwnd)

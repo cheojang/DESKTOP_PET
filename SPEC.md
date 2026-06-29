@@ -97,8 +97,8 @@ DRAG → (마우스 놓음) → FALL
 - 4x 슈퍼샘플링 후 LANCZOS 축소 → 안티앨리어싱된 고품질
 - 에셋 없을 시 자동 생성하는 메커니즘 필요 (현재 수동 1회 실행)
 
-### 9. 60FPS 렌더링 루프
-- QTimer 16ms 간격으로 메인 루프 구동
+### 9. 30FPS 렌더링 루프
+- QTimer 33ms 간격으로 메인 루프 구동 (CPU 절약)
 - 상태별(idle/walk/sleep/drag) 전용 합성 메서드
 - PIL로 파츠 합성 → `QImage.Format_RGBA8888` → `QPixmap` → `QLabel.setPixmap()`
 
@@ -106,6 +106,14 @@ DRAG → (마우스 놓음) → FALL
 - 바탕화면에 `.bat` 파일 생성
 - `pythonw.exe` 사용 (콘솔 창 숨김)
 - `cd /d` + `chcp 65001`로 경로/인코딩 문제 방지
+
+### 11. 웹캠 촬영 → AI 표정 생성 (camera_booth.py)
+- 트레이 메뉴 → "웹캠으로 촬영" → `cv2.VideoCapture(0)` 실시간 미리보기
+- 중앙 얼굴 가이드 타원 + 거울 반전 프리뷰
+- Space/촬영 버튼으로 정면 1장 캡처 → 임시 PNG 저장
+- 캡처 이미지를 `face_warp.generate_expressions()`에 투입하여 **AI 표정 8장 자동 생성**
+- 생성 직전 미리보기 정지 + 카메라 `release()`로 리소스 해제
+- Esc/창 닫기 시 카메라 정상 해제 (`closeEvent`/`reject` 오버라이드)
 
 ---
 
@@ -117,6 +125,7 @@ DESKTOP_PET/
 ├── pet_state_machine.py # 물리 엔진 + 상태 전이 + CPU 연동
 ├── pet_renderer.py      # 스프라이트 합성 렌더러
 ├── face_warp.py         # 사진→얼굴 추출→AR 표정 생성
+├── camera_booth.py      # 웹캠 촬영→AI 표정 생성 다이얼로그
 ├── create_assets.py     # 몸통/사지 에셋 자동 생성기
 ├── requirements.txt     # pip 의존성 목록
 ├── .gitignore
