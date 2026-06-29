@@ -40,6 +40,7 @@ def get_window_floors(own_hwnd=None):
         return []
     try:
         import ctypes
+        import ctypes.wintypes
         user32 = ctypes.windll.user32
         floors = []
 
@@ -93,7 +94,7 @@ class DesktopPet(QWidget):
         self._floor_y  = geom.bottom() - PET_H
 
         # 상태 머신 + 렌더러
-        self._sm  = PetStateMachine(self._screen_w, self._floor_y, self._floor_y)
+        self._sm  = PetStateMachine(self._screen_w, self._screen_h, self._floor_y)
         self._ren = PetRenderer()
 
         # 드래그 관련
