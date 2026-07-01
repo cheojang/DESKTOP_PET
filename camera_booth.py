@@ -9,9 +9,9 @@ import sys
 import tempfile
 import cv2
 
-from PyQt5.QtCore    import Qt, QTimer
-from PyQt5.QtGui     import QImage, QPixmap, QFont
-from PyQt5.QtWidgets import (
+from PySide6.QtCore    import Qt, QTimer
+from PySide6.QtGui     import QImage, QPixmap, QFont
+from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox
 )
@@ -35,7 +35,6 @@ class CameraBooth(QDialog):
         super().__init__(parent)
         self.setWindowTitle("웹캠 촬영 — AI 표정 생성")
         self.setFixedSize(PREVIEW_W + 20, PREVIEW_H + 130)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         self._frame    = None     # 최신 BGR 프레임 (거울 반전됨)
         self._saved    = []       # 생성된 표정 이름
@@ -192,7 +191,7 @@ class CameraBooth(QDialog):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     booth = CameraBooth()
-    if booth.exec_() == QDialog.Accepted:
+    if booth.exec() == QDialog.Accepted:
         print("생성된 표정:", booth.saved_expressions)
     else:
         print("취소됨")

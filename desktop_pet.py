@@ -1,6 +1,6 @@
 """
 데스크톱 펫 메인 컨트롤러.
-PyQt5 투명 오버레이 윈도우 + 30FPS 게임 루프.
+PySide6 투명 오버레이 윈도우 + 30FPS 게임 루프.
 """
 
 import sys
@@ -8,11 +8,11 @@ import os
 import platform
 import subprocess
 
-from PyQt5.QtCore    import Qt, QTimer, QPoint
-from PyQt5.QtGui     import QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtCore    import Qt, QTimer, QPoint
+from PySide6.QtGui     import QIcon, QAction
+from PySide6.QtWidgets import (
     QApplication, QLabel, QWidget,
-    QSystemTrayIcon, QMenu, QAction, QFileDialog, QMessageBox
+    QSystemTrayIcon, QMenu, QFileDialog, QMessageBox
 )
 
 # assets 자동 생성
@@ -165,9 +165,9 @@ class DesktopPet(QWidget):
 
     def _capture_webcam(self):
         from camera_booth import CameraBooth
-        from PyQt5.QtWidgets import QDialog
+        from PySide6.QtWidgets import QDialog
         booth = CameraBooth()
-        if booth.exec_() == QDialog.Accepted:
+        if booth.exec() == QDialog.Accepted:
             self._ren.reload_faces()
             saved = booth.saved_expressions
             self._tray.showMessage(
@@ -201,19 +201,19 @@ class DesktopPet(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._drag_offset = event.pos()
+            self._drag_offset = event.position().toPoint()
             self._sm.start_drag()
 
     def mouseMoveEvent(self, event):
         if self._sm.state == DRAG:
-            global_pos = event.globalPos()
+            global_pos = event.globalPosition().toPoint()
             cx = global_pos.x() + PET_W  // 2
             cy = global_pos.y() + PET_H
             self._sm.move_drag(cx, cy)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._sm.state == DRAG:
-            global_pos = event.globalPos()
+            global_pos = event.globalPosition().toPoint()
             cx = global_pos.x() + PET_W // 2
             cy = global_pos.y() + PET_H
             self._sm.end_drag(cx, cy)
@@ -242,7 +242,7 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     pet = DesktopPet()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

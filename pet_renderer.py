@@ -5,7 +5,7 @@ PIL로 파츠를 합성하고 QPixmap으로 변환.
 
 import os
 from PIL import Image
-from PyQt5.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap
 
 from pet_state_machine import FALL, IDLE, WALK, SLEEP, DRAG
 import face_warp
