@@ -94,9 +94,9 @@ class PetRenderer:
         self._paste(c, tail, (flip and 55 or 5, 40), flip=False)
         # 팔
         arm = self._assets["arm_l"].resize((18, 26), Image.LANCZOS)
-        self._paste(c, arm, (2, 30), flip=flip)
+        self._paste(c, arm, (2, 44), flip=flip)
         arm_r = self._assets["arm_r"].resize((18, 26), Image.LANCZOS)
-        self._paste(c, arm_r, (60, 30), flip=flip)
+        self._paste(c, arm_r, (60, 44), flip=flip)
         # 몸통
         self._paste(c, body, (10, 20), flip=flip)
         # 얼굴
@@ -104,11 +104,11 @@ class PetRenderer:
         if face:
             fsize = (44, 44)
             f = face.resize(fsize, Image.LANCZOS)
-            self._paste(c, f, (18, 8), flip=flip)
+            self._paste(c, f, (18, 16), flip=flip)
         # 다리
         leg = self._assets["leg_0"].resize((14, 20), Image.LANCZOS)
-        self._paste(c, leg, (20, 90), flip=flip)
-        self._paste(c, leg, (44, 90), flip=flip)
+        self._paste(c, leg, (20, 92), flip=flip)
+        self._paste(c, leg, (44, 92), flip=flip)
         return c
 
     def _render_walk(self, anim, flip):
@@ -121,11 +121,11 @@ class PetRenderer:
         arm_a = self._assets["arm_l"].resize((18, 26), Image.LANCZOS)
         arm_b = self._assets["arm_r"].resize((18, 26), Image.LANCZOS)
         if anim == 0:
-            self._paste(c, arm_a, (2, 30), flip=flip)
-            self._paste(c, arm_b, (60, 28), flip=flip)
+            self._paste(c, arm_a, (2, 44), flip=flip)
+            self._paste(c, arm_b, (60, 42), flip=flip)
         else:
-            self._paste(c, arm_a, (2, 28), flip=flip)
-            self._paste(c, arm_b, (60, 30), flip=flip)
+            self._paste(c, arm_a, (2, 42), flip=flip)
+            self._paste(c, arm_b, (60, 44), flip=flip)
         # 몸통
         self._paste(c, body, (10, 20), flip=flip)
         # 얼굴
@@ -133,7 +133,7 @@ class PetRenderer:
         face = self._face(expr)
         if face:
             f = face.resize((44, 44), Image.LANCZOS)
-            self._paste(c, f, (18, 8), flip=False)
+            self._paste(c, f, (18, 16), flip=False)
         # 다리 (교차)
         leg0 = self._assets["leg_0"].resize((14, 20), Image.LANCZOS)
         leg1 = self._assets["leg_1"].resize((14, 20), Image.LANCZOS)
@@ -154,7 +154,7 @@ class PetRenderer:
         face = self._face("sleep")
         if face:
             f = face.resize((44, 44), Image.LANCZOS)
-            self._paste(c, f, (18, 16), flip=flip)
+            self._paste(c, f, (18, 18), flip=flip)
         # Zzz 말풍선
         zzz = self._assets["zzz"]
         if (self._frame // 30) % 2 == 0:
@@ -175,7 +175,7 @@ class PetRenderer:
         face = self._face("drag")
         if face:
             f = face.resize((44, 44), Image.LANCZOS)
-            self._paste(c, f, (18, 6), flip=flip)
+            self._paste(c, f, (18, 10), flip=flip)
         # 다리 발버둥
         leg0 = self._assets["leg_0"].resize((14, 20), Image.LANCZOS)
         leg1 = self._assets["leg_1"].resize((14, 20), Image.LANCZOS)
